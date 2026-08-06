@@ -26,6 +26,7 @@ namespace {
 
 enum class submission_kind {
     now_playing,
+    remove_now_playing,
     scrobble,
 };
 
@@ -39,6 +40,7 @@ public:
     void account_connected(const std::string& username);
     void account_disconnected();
     void now_playing(const track_metadata& track);
+    void remove_now_playing();
     [[nodiscard]] bool enqueue(const scrobble_record& record);
     [[nodiscard]] submission_diagnostics diagnostics() const;
     void task_done(submission_task& task, bool was_aborted);
@@ -59,6 +61,7 @@ private:
 
     persisted_scrobble_queue queue_;
     std::optional<track_metadata> pending_now_playing_;
+    bool pending_remove_now_playing_ = false;
     std::string status_ = "Ready.";
     PTP_TIMER retry_timer_ = nullptr;
     std::atomic_bool timer_callbacks_enabled_{false};
@@ -126,11 +129,9 @@ public:
     }
 
     void run(threaded_process_status& status, abort_callback& abort) override {
-        status.set_item(kind_ == submission_kind::now_playing
-            ? "Updating Last.fm now playing..."
-            : "Submitting Last.fm scrobble...");
         try {
             if (kind_ == submission_kind::now_playing) {
+                status.set_item("Updating Last.fm now playing...");
                 if (!track_.has_value()) {
                     throw std::logic_error("Now-playing task has no track");
                 }
@@ -140,7 +141,15 @@ public:
                     *track_,
                     abort
                 );
+            } else if (kind_ == submission_kind::remove_now_playing) {
+                status.set_item("Clearing Last.fm now playing...");
+                request_remove_now_playing(
+                    credentials_,
+                    session_.session_key,
+                    abort
+                );
             } else {
+                status.set_item("Submitting Last.fm scrobble...");
                 if (!record_.has_value()) {
                     throw std::logic_error("Scrobble task has no record");
                 }
@@ -252,6 +261,7 @@ void submission_dispatcher::shutdown() noexcept {
     }
     shutting_down_ = true;
     pending_now_playing_.reset();
+    pending_remove_now_playing_ = false;
     timer_callbacks_enabled_.store(false, std::memory_order_release);
     cancel_retry_timer(false);
     if (retry_timer_ != nullptr) {
@@ -290,6 +300,7 @@ void submission_dispatcher::account_connected(
 void submission_dispatcher::account_disconnected() {
     core_api::ensure_main_thread();
     pending_now_playing_.reset();
+    pending_remove_now_playing_ = false;
     queue_ = {};
     retry_blocked_ = true;
     cancel_retry_timer(true);
@@ -304,7 +315,22 @@ void submission_dispatcher::now_playing(const track_metadata& track) {
         return;
     }
 
+    pending_remove_now_playing_ = false;
     pending_now_playing_ = track;
+    retry_blocked_ = false;
+    cancel_retry_timer(false);
+    start_next();
+}
+
+void submission_dispatcher::remove_now_playing() {
+    core_api::ensure_main_thread();
+    if (!initialized_ || shutting_down_ ||
+        !session_config::has_encrypted_session()) {
+        return;
+    }
+
+    pending_now_playing_.reset();
+    pending_remove_now_playing_ = true;
     retry_blocked_ = false;
     cancel_retry_timer(false);
     start_next();
@@ -373,15 +399,17 @@ void submission_dispatcher::start_next() noexcept {
         return;
     }
 
+    const bool has_remove_now_playing = pending_remove_now_playing_;
     const bool has_now_playing = pending_now_playing_.has_value();
     const bool has_scrobble =
         !queue_.records.empty() && !retry_blocked_;
-    if (!has_now_playing && !has_scrobble) {
+    if (!has_remove_now_playing && !has_now_playing && !has_scrobble) {
         return;
     }
     if (!app_api_credentials_available() ||
         !session_config::has_encrypted_session()) {
         pending_now_playing_.reset();
+        pending_remove_now_playing_ = false;
         return;
     }
 
@@ -389,12 +417,15 @@ void submission_dispatcher::start_next() noexcept {
         auto session = session_config::load();
         if (!session.has_value()) {
             pending_now_playing_.reset();
+            pending_remove_now_playing_ = false;
             return;
         }
 
-        const auto kind = has_now_playing
-            ? submission_kind::now_playing
-            : submission_kind::scrobble;
+        const auto kind = has_remove_now_playing
+            ? submission_kind::remove_now_playing
+            : has_now_playing
+                ? submission_kind::now_playing
+                : submission_kind::scrobble;
         if (kind == submission_kind::scrobble) {
             if (queue_.owner_username.empty()) {
                 queue_.owner_username = session->username;
@@ -409,7 +440,10 @@ void submission_dispatcher::start_next() noexcept {
 
         std::optional<track_metadata> track;
         std::optional<scrobble_record> record;
-        if (kind == submission_kind::now_playing) {
+        if (kind == submission_kind::remove_now_playing) {
+            pending_remove_now_playing_ = false;
+            status_ = "Clearing now-playing status...";
+        } else if (kind == submission_kind::now_playing) {
             track = std::move(pending_now_playing_);
             pending_now_playing_.reset();
             status_ = "Sending now-playing update...";
@@ -434,7 +468,13 @@ void submission_dispatcher::start_next() noexcept {
         );
     } catch (const std::exception& exception) {
         active_ = false;
-        if (has_now_playing) {
+        if (has_remove_now_playing) {
+            console::complain(
+                "foo_lastfm_scrobbler: could not start now-playing removal",
+                exception
+            );
+            status_ = "Now-playing status could not be cleared.";
+        } else if (has_now_playing) {
             console::complain(
                 "foo_lastfm_scrobbler: could not start now-playing update",
                 exception
@@ -620,6 +660,31 @@ void submission_dispatcher::task_done(
                 task.response()->ignored_code << ": " <<
                 task.response()->ignored_message.c_str() << ')';
         }
+    } else if (task.kind() == submission_kind::remove_now_playing) {
+        if (was_aborted) {
+            console::print(
+                "foo_lastfm_scrobbler: Last.fm now-playing removal was cancelled"
+            );
+            if (!shutting_down_) {
+                retry_blocked_ = false;
+                status_ = "Now-playing removal was cancelled.";
+            }
+        } else if (!task.error().empty()) {
+            console::complain(
+                "foo_lastfm_scrobbler: Last.fm now-playing removal failed",
+                task.error().c_str()
+            );
+            if (!invalid_session) {
+                retry_blocked_ = false;
+                status_ = "Now-playing status could not be cleared.";
+            }
+        } else {
+            retry_blocked_ = false;
+            status_ = "Now-playing status cleared.";
+            console::print(
+                "foo_lastfm_scrobbler: Last.fm now playing cleared"
+            );
+        }
     } else {
         bool remove_record = false;
         if (was_aborted) {
@@ -723,6 +788,17 @@ void submit_now_playing(const track_metadata& track) noexcept {
     } catch (const std::exception& exception) {
         console::complain(
             "foo_lastfm_scrobbler: could not queue now-playing update",
+            exception
+        );
+    }
+}
+
+void remove_now_playing() noexcept {
+    try {
+        dispatcher().remove_now_playing();
+    } catch (const std::exception& exception) {
+        console::complain(
+            "foo_lastfm_scrobbler: could not queue now-playing removal",
             exception
         );
     }

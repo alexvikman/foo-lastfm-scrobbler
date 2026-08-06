@@ -39,6 +39,8 @@ struct lastfm_submission_response {
     std::string_view json
 );
 
+void parse_remove_now_playing_response(std::string_view json);
+
 [[nodiscard]] lastfm_submission_response parse_scrobble_response(
     std::string_view json
 );

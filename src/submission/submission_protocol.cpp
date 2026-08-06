@@ -93,6 +93,17 @@ signed_api_request make_now_playing_request(
     );
 }
 
+signed_api_request make_remove_now_playing_request(
+    const api_credentials& credentials,
+    const std::string& session_key
+) {
+    return finish_request(
+        {{"method", "track.removeNowPlaying"}},
+        credentials,
+        session_key
+    );
+}
+
 signed_api_request make_scrobble_request(
     const api_credentials& credentials,
     const std::string& session_key,

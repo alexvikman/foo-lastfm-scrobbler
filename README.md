@@ -5,7 +5,7 @@ A native Last.fm scrobbler component for foobar2000 2.x on 64-bit Windows.
 ## Features
 
 - Browser-based Last.fm account authorization with a persistent session.
-- Now-playing updates when a tagged track starts.
+- Now-playing updates that follow playback starts, pauses, resumes, and stops.
 - Scrobbling after half the track or four minutes, whichever comes first.
 - Active listening-time tracking that excludes pauses, stops, and seeks.
 - Structured tag handling for artist, title, album, album artist, track number,

@@ -30,6 +30,12 @@ namespace lastfm_scrobbler {
     abort_callback& abort
 );
 
+void request_remove_now_playing(
+    const api_credentials& credentials,
+    const std::string& session_key,
+    abort_callback& abort
+);
+
 [[nodiscard]] lastfm_submission_response request_scrobble(
     const api_credentials& credentials,
     const std::string& session_key,

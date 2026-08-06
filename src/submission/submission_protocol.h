@@ -14,6 +14,11 @@ namespace lastfm_scrobbler {
     const track_metadata& track
 );
 
+[[nodiscard]] signed_api_request make_remove_now_playing_request(
+    const api_credentials& credentials,
+    const std::string& session_key
+);
+
 [[nodiscard]] signed_api_request make_scrobble_request(
     const api_credentials& credentials,
     const std::string& session_key,

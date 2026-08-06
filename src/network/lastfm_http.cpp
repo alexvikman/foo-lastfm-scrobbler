@@ -34,7 +34,7 @@ constexpr std::size_t maximum_response_size = 64 * 1024;
         "application/x-www-form-urlencoded; charset=utf-8"
     );
     request->add_header("Accept", "application/json");
-    request->add_header("User-Agent", "foo_lastfm_scrobbler/0.4");
+    request->add_header("User-Agent", "foo_lastfm_scrobbler/0.4.1");
 
     auto response_stream = request->run_ex(api_endpoint, abort);
     std::string response;
@@ -91,6 +91,19 @@ lastfm_submission_response request_now_playing(
     return parse_now_playing_response(
         perform_request(
             make_now_playing_request(credentials, session_key, track),
+            abort
+        )
+    );
+}
+
+void request_remove_now_playing(
+    const api_credentials& credentials,
+    const std::string& session_key,
+    abort_callback& abort
+) {
+    parse_remove_now_playing_response(
+        perform_request(
+            make_remove_now_playing_request(credentials, session_key),
             abort
         )
     );

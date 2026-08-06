@@ -23,6 +23,7 @@ void submission_account_disconnected() noexcept;
 [[nodiscard]] submission_diagnostics submission_diagnostics_snapshot() noexcept;
 
 void submit_now_playing(const track_metadata& track) noexcept;
+void remove_now_playing() noexcept;
 
 // Returns true only after the record has been durably added to the encrypted
 // queue. Delivery then happens asynchronously.

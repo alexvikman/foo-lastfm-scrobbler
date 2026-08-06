@@ -49,6 +49,9 @@ public:
     }
 
     void on_playback_stop(play_control::t_stop_reason) noexcept override {
+        if (now_playing_requested_) {
+            lastfm_scrobbler::remove_now_playing();
+        }
         session_.stop();
         has_reported_time_ = false;
         playback_is_paused_ = false;
@@ -68,8 +71,16 @@ public:
         playback_is_paused_ = paused;
         if (paused) {
             session_.pause();
+            if (now_playing_requested_) {
+                lastfm_scrobbler::remove_now_playing();
+                now_playing_requested_ = false;
+            }
         } else {
             session_.resume();
+            if (current_metadata_.has_value() && !now_playing_requested_) {
+                lastfm_scrobbler::submit_now_playing(*current_metadata_);
+                now_playing_requested_ = true;
+            }
         }
     }
 
@@ -159,7 +170,7 @@ private:
                 FB2K_console_formatter() <<
                     "foo_lastfm_scrobbler: current track will not be scrobbled (" <<
                     lastfm_scrobbler::metadata_error_message(normalized.error) << ')';
-            } else if (!now_playing_requested_) {
+            } else if (!playback_is_paused_ && !now_playing_requested_) {
                 lastfm_scrobbler::submit_now_playing(*current_metadata_);
                 now_playing_requested_ = true;
             }

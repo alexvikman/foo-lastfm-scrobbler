@@ -368,6 +368,19 @@ void test_submission_request_builders() {
     expect(now_playing.api_signature.size() == 32,
         "now-playing request is signed");
 
+    const auto remove_now_playing = make_remove_now_playing_request(
+        credentials,
+        "0123456789abcdefghijklmnopqrstuv"
+    );
+    expect(parameter_value(remove_now_playing.parameters, "method") ==
+        "track.removeNowPlaying",
+        "now-playing removal uses Last.fm's removal method");
+    expect(parameter_value(remove_now_playing.parameters, "artist").empty() &&
+        parameter_value(remove_now_playing.parameters, "track").empty(),
+        "now-playing removal does not send track metadata");
+    expect(remove_now_playing.api_signature.size() == 32,
+        "now-playing removal is signed");
+
     const auto scrobble = make_scrobble_request(
         credentials,
         "0123456789abcdefghijklmnopqrstuv",
@@ -403,6 +416,19 @@ void test_submission_responses() {
     expect(!ignored.accepted && ignored.ignored_code == 1 &&
         ignored.ignored_message == "Timestamp too old",
         "an ignored scrobble retains its code and explanation");
+
+    parse_remove_now_playing_response(R"({})");
+
+    bool remove_error_reported = false;
+    try {
+        parse_remove_now_playing_response(
+            R"({"error":16,"message":"Service unavailable"})"
+        );
+    } catch (const lastfm_api_error& error) {
+        remove_error_reported = error.code() == 16;
+    }
+    expect(remove_error_reported,
+        "now-playing removal retains Last.fm API errors");
 
     bool inconsistent_rejected = false;
     try {

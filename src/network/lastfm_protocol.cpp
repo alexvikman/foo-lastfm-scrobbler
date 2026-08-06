@@ -547,6 +547,10 @@ lastfm_submission_response parse_now_playing_response(
     };
 }
 
+void parse_remove_now_playing_response(std::string_view json) {
+    static_cast<void>(parse_response(json));
+}
+
 lastfm_submission_response parse_scrobble_response(
     std::string_view json
 ) {
