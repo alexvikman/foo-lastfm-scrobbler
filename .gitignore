@@ -1,0 +1,11 @@
+.deps/
+build/
+out/
+x64/
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+*.fb2k-component
+src/auth/api_credentials.local.h

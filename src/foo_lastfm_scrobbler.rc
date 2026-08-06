@@ -1,0 +1,16 @@
+#include <windows.h>
+#include "resource.h"
+
+IDD_LASTFM_PREFERENCES DIALOGEX 0, 0, 338, 168
+STYLE DS_SETFONT | WS_CHILD
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "Last.fm account",-1,8,8,100,10
+    LTEXT           "Not connected.",IDC_LASTFM_STATUS,8,24,322,24
+    PUSHBUTTON      "Connect account",IDC_LASTFM_CONNECT,8,54,88,16
+    PUSHBUTTON      "Finish connection",IDC_LASTFM_FINISH,102,54,88,16
+    PUSHBUTTON      "Disconnect",IDC_LASTFM_DISCONNECT,196,54,70,16
+    LTEXT           "Submission status",-1,8,84,100,10
+    LTEXT           "Queue: 0. Ready.",IDC_LASTFM_SUBMISSION_STATUS,8,100,322,24
+    LTEXT           "Connection opens Last.fm in your browser once. The resulting session and pending scrobbles are stored securely and reused when foobar2000 starts.",-1,8,132,322,28
+END

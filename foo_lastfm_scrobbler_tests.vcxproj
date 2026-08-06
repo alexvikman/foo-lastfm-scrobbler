@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{85F03A6C-2A0B-47FE-9E3F-2468D88565BF}</ProjectGuid>
+    <RootNamespace>foo_lastfm_scrobbler_tests</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)out\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)build\tests\$(Configuration)\</IntDir>
+    <TargetName>foo_lastfm_scrobbler_tests</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>Bcrypt.lib;Crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\auth\api_signature.cpp" />
+    <ClCompile Include="src\auth\auth_flow.cpp" />
+    <ClCompile Include="src\auth\secure_session.cpp" />
+    <ClCompile Include="src\core\scrobble_policy.cpp" />
+    <ClCompile Include="src\core\track_metadata.cpp" />
+    <ClCompile Include="src\network\lastfm_protocol.cpp" />
+    <ClCompile Include="src\submission\retry_policy.cpp" />
+    <ClCompile Include="src\submission\submission_protocol.cpp" />
+    <ClCompile Include="src\submission\submission_queue.cpp" />
+    <ClCompile Include="tests\scrobble_policy_tests.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\auth\api_signature.h" />
+    <ClInclude Include="src\auth\auth_flow.h" />
+    <ClInclude Include="src\auth\secure_session.h" />
+    <ClInclude Include="src\core\scrobble_policy.h" />
+    <ClInclude Include="src\core\track_metadata.h" />
+    <ClInclude Include="src\network\lastfm_protocol.h" />
+    <ClInclude Include="src\submission\retry_policy.h" />
+    <ClInclude Include="src\submission\submission_protocol.h" />
+    <ClInclude Include="src\submission\submission_queue.h" />
+    <ClInclude Include="src\submission\submission_record.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

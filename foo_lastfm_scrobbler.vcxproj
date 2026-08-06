@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{6D8F31D4-B317-4A98-8EB7-72533792E781}</ProjectGuid>
+    <RootNamespace>foo_lastfm_scrobbler</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <FoobarSdkRoot>$(ProjectDir).deps\sdk</FoobarSdkRoot>
+    <OutDir>$(ProjectDir)out\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)build\component\$(Configuration)\</IntDir>
+    <TargetName>foo_lastfm_scrobbler</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(FoobarSdkRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4100;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <PreprocessorDefinitions>_DEBUG;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>$(FoobarSdkRoot)\foobar2000\shared\shared-$(Platform).lib;Bcrypt.lib;Crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(FoobarSdkRoot);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4100;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <PreprocessorDefinitions>NDEBUG;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <AdditionalDependencies>$(FoobarSdkRoot)\foobar2000\shared\shared-$(Platform).lib;Bcrypt.lib;Crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\auth\api_signature.cpp" />
+    <ClCompile Include="src\auth\app_credentials.cpp" />
+    <ClCompile Include="src\auth\auth_flow.cpp" />
+    <ClCompile Include="src\auth\secure_session.cpp" />
+    <ClCompile Include="src\auth\session_config.cpp" />
+    <ClCompile Include="src\component.cpp" />
+    <ClCompile Include="src\core\scrobble_policy.cpp" />
+    <ClCompile Include="src\core\track_metadata.cpp" />
+    <ClCompile Include="src\network\lastfm_http.cpp" />
+    <ClCompile Include="src\network\lastfm_protocol.cpp" />
+    <ClCompile Include="src\playback_observer.cpp" />
+    <ClCompile Include="src\preferences.cpp" />
+    <ClCompile Include="src\submission\retry_policy.cpp" />
+    <ClCompile Include="src\submission\submission_config.cpp" />
+    <ClCompile Include="src\submission\submission_protocol.cpp" />
+    <ClCompile Include="src\submission\submission_queue.cpp" />
+    <ClCompile Include="src\submission\submission_service.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\auth\api_signature.h" />
+    <ClInclude Include="src\auth\app_credentials.h" />
+    <ClInclude Include="src\auth\api_credentials.local.example.h" />
+    <ClInclude Include="src\auth\auth_flow.h" />
+    <ClInclude Include="src\auth\secure_session.h" />
+    <ClInclude Include="src\auth\session_config.h" />
+    <ClInclude Include="src\core\scrobble_policy.h" />
+    <ClInclude Include="src\core\track_metadata.h" />
+    <ClInclude Include="src\network\lastfm_http.h" />
+    <ClInclude Include="src\network\lastfm_protocol.h" />
+    <ClInclude Include="src\resource.h" />
+    <ClInclude Include="src\submission\retry_policy.h" />
+    <ClInclude Include="src\submission\submission_config.h" />
+    <ClInclude Include="src\submission\submission_protocol.h" />
+    <ClInclude Include="src\submission\submission_queue.h" />
+    <ClInclude Include="src\submission\submission_record.h" />
+    <ClInclude Include="src\submission\submission_service.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\foo_lastfm_scrobbler.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include=".deps\sdk\pfc\pfc.vcxproj">
+      <Project>{EBFFFB4E-261D-44D3-B89C-957B31A0BF9C}</Project>
+    </ProjectReference>
+    <ProjectReference Include=".deps\sdk\foobar2000\SDK\foobar2000_SDK.vcxproj">
+      <Project>{E8091321-D79D-4575-86EF-064EA1A4A20D}</Project>
+    </ProjectReference>
+    <ProjectReference Include=".deps\sdk\foobar2000\foobar2000_component_client\foobar2000_component_client.vcxproj">
+      <Project>{71AD2674-065B-48F5-B8B0-E1F9D3892081}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Target Name="CheckFoobarSdk" BeforeTargets="PrepareForBuild" Condition="!Exists('$(FoobarSdkRoot)\foobar2000\SDK\foobar2000.h')">
+    <Error Text="foobar2000 SDK not found. Run scripts\bootstrap-sdk.ps1 first." />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>
