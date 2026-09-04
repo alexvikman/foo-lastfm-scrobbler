@@ -66,6 +66,8 @@ private:
     PTP_TIMER retry_timer_ = nullptr;
     std::atomic_bool timer_callbacks_enabled_{false};
     std::atomic_uint64_t retry_generation_{0};
+    std::uint64_t account_generation_ = 0;
+    std::uint64_t queue_generation_ = 0;
     unsigned retry_attempts_ = 0;
     unsigned retry_delay_seconds_ = 0;
     bool initialized_ = false;
@@ -113,12 +115,16 @@ class submission_task : public threaded_process_callback {
 public:
     submission_task(
         submission_kind kind,
+        std::uint64_t account_generation,
+        std::uint64_t queue_generation,
         api_credentials credentials,
         session_credentials session,
         std::optional<track_metadata> track,
         std::optional<scrobble_record> record
     ) :
         kind_(kind),
+        account_generation_(account_generation),
+        queue_generation_(queue_generation),
         credentials_(std::move(credentials)),
         session_(std::move(session)),
         track_(std::move(track)),
@@ -178,6 +184,18 @@ public:
         return kind_;
     }
 
+    [[nodiscard]] std::uint64_t account_generation() const noexcept {
+        return account_generation_;
+    }
+
+    [[nodiscard]] std::uint64_t queue_generation() const noexcept {
+        return queue_generation_;
+    }
+
+    [[nodiscard]] const std::string& username() const noexcept {
+        return session_.username;
+    }
+
     [[nodiscard]] const std::optional<lastfm_submission_response>& response()
         const noexcept {
         return response_;
@@ -197,6 +215,8 @@ public:
 
 private:
     submission_kind kind_;
+    std::uint64_t account_generation_;
+    std::uint64_t queue_generation_;
     api_credentials credentials_;
     session_credentials session_;
     std::optional<track_metadata> track_;
@@ -279,6 +299,11 @@ void submission_dispatcher::account_connected(
         return;
     }
 
+    ++account_generation_;
+    pending_now_playing_.reset();
+    pending_remove_now_playing_ = false;
+    cancel_retry_timer(true);
+
     if (!queue_.records.empty()) {
         if (queue_.owner_username.empty()) {
             queue_.owner_username = username;
@@ -292,13 +317,14 @@ void submission_dispatcher::account_connected(
     }
 
     retry_blocked_ = false;
-    cancel_retry_timer(false);
     status_ = "Connected and ready.";
     start_next();
 }
 
 void submission_dispatcher::account_disconnected() {
     core_api::ensure_main_thread();
+    ++account_generation_;
+    ++queue_generation_;
     pending_now_playing_.reset();
     pending_remove_now_playing_ = false;
     queue_ = {};
@@ -317,8 +343,9 @@ void submission_dispatcher::now_playing(const track_metadata& track) {
 
     pending_remove_now_playing_ = false;
     pending_now_playing_ = track;
-    retry_blocked_ = false;
-    cancel_retry_timer(false);
+    if (retry_timer_ == nullptr) {
+        retry_blocked_ = false;
+    }
     start_next();
 }
 
@@ -331,8 +358,9 @@ void submission_dispatcher::remove_now_playing() {
 
     pending_now_playing_.reset();
     pending_remove_now_playing_ = true;
-    retry_blocked_ = false;
-    cancel_retry_timer(false);
+    if (retry_timer_ == nullptr) {
+        retry_blocked_ = false;
+    }
     start_next();
 }
 
@@ -369,8 +397,9 @@ bool submission_dispatcher::enqueue(const scrobble_record& record) {
         throw;
     }
 
-    retry_blocked_ = false;
-    cancel_retry_timer(false);
+    if (retry_timer_ == nullptr) {
+        retry_blocked_ = false;
+    }
     status_ = "Scrobble saved in the encrypted queue.";
     start_next();
     return true;
@@ -454,6 +483,8 @@ void submission_dispatcher::start_next() noexcept {
 
         auto task = fb2k::service_new<submission_task>(
             kind,
+            account_generation_,
+            queue_generation_,
             app_api_credentials(),
             std::move(*session),
             std::move(track),
@@ -527,7 +558,7 @@ void submission_dispatcher::invalidate_session() noexcept {
 
 void submission_dispatcher::schedule_retry() noexcept {
     retry_blocked_ = true;
-    if (shutting_down_ || queue_.records.empty()) {
+    if (shutting_down_ || queue_.records.empty() || retry_scheduled_) {
         return;
     }
     if (retry_timer_ == nullptr) {
@@ -612,9 +643,29 @@ void submission_dispatcher::task_done(
     core_api::ensure_main_thread();
     active_ = false;
 
+    // A request can complete after disconnecting or replacing its session.
+    // Stale errors must not change the replacement session. A known success
+    // can still acknowledge its original queue entry across reauthentication,
+    // but never a new queue created by disconnecting/reconnecting.
+    if (task.account_generation() != account_generation_) {
+        if (task.kind() == submission_kind::scrobble && !was_aborted &&
+            task.response().has_value() && task.response()->accepted &&
+            task.queue_generation() == queue_generation_ &&
+            queue_.owner_username == task.username() &&
+            !queue_.records.empty() && task.record().has_value() &&
+            queue_.records.front() == *task.record()) {
+            queue_.records.erase(queue_.records.begin());
+            persist_queue();
+            reset_retry_after_final_result();
+        }
+        start_next();
+        return;
+    }
+
     const auto error_code = task.api_error_code();
     const bool invalid_session = error_code == 9;
-    const bool retryable_api_error = error_code == 11 || error_code == 16;
+    const bool retryable_api_error =
+        error_code == 11 || error_code == 16 || error_code == 29;
     if (invalid_session) {
         invalidate_session();
     }
@@ -642,18 +693,15 @@ void submission_dispatcher::task_done(
                 (retryable_api_error || !error_code.has_value())) {
                 status_ = "Now-playing update failed temporarily.";
             } else if (!invalid_session) {
-                retry_blocked_ = false;
-                status_ = "Now-playing update failed; scrobble queue can continue.";
+                status_ = "Now-playing update failed.";
             }
         } else if (task.response().has_value() &&
             task.response()->accepted) {
-            retry_blocked_ = false;
             status_ = "Now playing updated.";
             console::print(
                 "foo_lastfm_scrobbler: Last.fm now playing updated"
             );
         } else if (task.response().has_value()) {
-            retry_blocked_ = false;
             status_ = "Last.fm ignored the now-playing update.";
             FB2K_console_formatter() <<
                 "foo_lastfm_scrobbler: Last.fm ignored now playing (" <<
@@ -666,7 +714,6 @@ void submission_dispatcher::task_done(
                 "foo_lastfm_scrobbler: Last.fm now-playing removal was cancelled"
             );
             if (!shutting_down_) {
-                retry_blocked_ = false;
                 status_ = "Now-playing removal was cancelled.";
             }
         } else if (!task.error().empty()) {
@@ -675,11 +722,9 @@ void submission_dispatcher::task_done(
                 task.error().c_str()
             );
             if (!invalid_session) {
-                retry_blocked_ = false;
                 status_ = "Now-playing status could not be cleared.";
             }
         } else {
-            retry_blocked_ = false;
             status_ = "Now-playing status cleared.";
             console::print(
                 "foo_lastfm_scrobbler: Last.fm now playing cleared"
@@ -734,9 +779,9 @@ void submission_dispatcher::task_done(
         }
     }
 
-    if (!retry_blocked_ && !shutting_down_) {
-        start_next();
-    }
+    // start_next() applies backoff to scrobbles while allowing a newer
+    // playback status (including a pending pause/stop) to proceed.
+    start_next();
 }
 
 } // namespace

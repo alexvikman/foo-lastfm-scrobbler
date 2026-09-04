@@ -85,6 +85,7 @@
     <ClCompile Include="src\auth\secure_session.cpp" />
     <ClCompile Include="src\auth\session_config.cpp" />
     <ClCompile Include="src\component.cpp" />
+    <ClCompile Include="src\core\playback_tracker.cpp" />
     <ClCompile Include="src\core\scrobble_policy.cpp" />
     <ClCompile Include="src\core\track_metadata.cpp" />
     <ClCompile Include="src\network\lastfm_http.cpp" />
@@ -104,6 +105,7 @@
     <ClInclude Include="src\auth\auth_flow.h" />
     <ClInclude Include="src\auth\secure_session.h" />
     <ClInclude Include="src\auth\session_config.h" />
+    <ClInclude Include="src\core\playback_tracker.h" />
     <ClInclude Include="src\core\scrobble_policy.h" />
     <ClInclude Include="src\core\track_metadata.h" />
     <ClInclude Include="src\network\lastfm_http.h" />

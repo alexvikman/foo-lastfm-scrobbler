@@ -1,19 +1,19 @@
 #include <foobar2000/SDK/foobar2000.h>
 
-#include "core/scrobble_policy.h"
+#include "core/playback_tracker.h"
 #include "core/track_metadata.h"
 #include "submission/submission_service.h"
 
 #include <chrono>
-#include <cmath>
-#include <cstdint>
 #include <exception>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace {
 
-class playback_observer : public play_callback_static {
+class playback_observer : public play_callback_static,
+    private lastfm_scrobbler::playback_submission_sink {
 public:
     unsigned get_flags() override {
         return flag_on_playback_starting |
@@ -29,92 +29,42 @@ public:
         play_control::t_track_command,
         bool paused
     ) noexcept override {
-        playback_is_paused_ = paused;
+        tracker_.starting(paused);
     }
 
     void on_playback_new_track(metadb_handle_ptr track) noexcept override {
-        session_.start(track->get_length());
-        if (playback_is_paused_) {
-            session_.pause();
-        }
-
-        last_reported_time_ = 0.0;
-        has_reported_time_ = true;
-        submission_attempted_ = false;
-        now_playing_requested_ = false;
-        started_at_unix_ = std::chrono::duration_cast<std::chrono::seconds>(
+        const auto started_at_unix = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()
         ).count();
+        tracker_.new_track(track->get_length(), started_at_unix);
         capture_metadata(track);
     }
 
     void on_playback_stop(play_control::t_stop_reason) noexcept override {
-        if (now_playing_requested_) {
-            lastfm_scrobbler::remove_now_playing();
-        }
-        session_.stop();
-        has_reported_time_ = false;
-        playback_is_paused_ = false;
-        submission_attempted_ = false;
-        now_playing_requested_ = false;
-        started_at_unix_ = 0;
-        current_metadata_.reset();
+        tracker_.stop();
     }
 
     void on_playback_seek(double time) noexcept override {
-        session_.seek(time);
-        last_reported_time_ = time;
-        has_reported_time_ = std::isfinite(time);
+        tracker_.seek(time);
     }
 
     void on_playback_pause(bool paused) noexcept override {
-        playback_is_paused_ = paused;
-        if (paused) {
-            session_.pause();
-            if (now_playing_requested_) {
-                lastfm_scrobbler::remove_now_playing();
-                now_playing_requested_ = false;
-            }
-        } else {
-            session_.resume();
-            if (current_metadata_.has_value() && !now_playing_requested_) {
-                lastfm_scrobbler::submit_now_playing(*current_metadata_);
-                now_playing_requested_ = true;
-            }
-        }
+        tracker_.pause(paused);
     }
 
     void on_playback_time(double time) noexcept override {
-        if (!std::isfinite(time)) {
-            return;
-        }
-
-        if (has_reported_time_) {
-            const auto elapsed = time - last_reported_time_;
-            session_.record_played_interval(elapsed);
-        }
-
-        last_reported_time_ = time;
-        has_reported_time_ = true;
-
-        if (session_.ready_to_scrobble() && !submission_attempted_) {
-            submission_attempted_ = true;
-            if (current_metadata_.has_value()) {
-                const lastfm_scrobbler::scrobble_record record{
-                    .track = *current_metadata_,
-                    .started_at_unix = started_at_unix_,
-                };
-                if (lastfm_scrobbler::enqueue_scrobble(record)) {
-                    static_cast<void>(session_.mark_submitted());
-                    console::print(
-                        "foo_lastfm_scrobbler: eligible track added to the encrypted scrobble queue"
-                    );
-                } else {
-                    console::print(
-                        "foo_lastfm_scrobbler: eligible track could not be queued; verify that the Last.fm account is connected"
-                    );
-                }
-            }
+        const auto result = tracker_.time(
+            time,
+            lastfm_scrobbler::playback_tracker::clock::now()
+        );
+        if (result == lastfm_scrobbler::playback_enqueue_result::queued) {
+            console::print(
+                "foo_lastfm_scrobbler: eligible track added to the encrypted scrobble queue"
+            );
+        } else if (result == lastfm_scrobbler::playback_enqueue_result::first_failure) {
+            console::print(
+                "foo_lastfm_scrobbler: eligible track could not be queued; retrying while the track remains active"
+            );
         }
     }
 
@@ -126,6 +76,18 @@ public:
     void on_volume_change(float) noexcept override {}
 
 private:
+    void publish_track(const lastfm_scrobbler::track_metadata& track) noexcept override {
+        lastfm_scrobbler::submit_now_playing(track);
+    }
+
+    void clear_track() noexcept override {
+        lastfm_scrobbler::remove_now_playing();
+    }
+
+    bool enqueue_track(const lastfm_scrobbler::scrobble_record& record) noexcept override {
+        return lastfm_scrobbler::enqueue_scrobble(record);
+    }
+
     [[nodiscard]] static std::string read_joined_tag(
         const file_info& info,
         const char* name
@@ -165,37 +127,27 @@ private:
             source.duration_seconds = track->get_length();
 
             auto normalized = lastfm_scrobbler::normalize_track_metadata(source);
-            current_metadata_ = std::move(normalized.value);
-            if (!current_metadata_.has_value()) {
+            tracker_.set_metadata(std::move(normalized.value));
+            if (normalized.error != lastfm_scrobbler::metadata_error::none) {
                 FB2K_console_formatter() <<
                     "foo_lastfm_scrobbler: current track will not be scrobbled (" <<
                     lastfm_scrobbler::metadata_error_message(normalized.error) << ')';
-            } else if (!playback_is_paused_ && !now_playing_requested_) {
-                lastfm_scrobbler::submit_now_playing(*current_metadata_);
-                now_playing_requested_ = true;
             }
         } catch (const std::exception& exception) {
-            current_metadata_.reset();
+            tracker_.set_metadata(std::nullopt);
             console::complain(
                 "foo_lastfm_scrobbler: could not read current track metadata",
                 exception
             );
         } catch (...) {
-            current_metadata_.reset();
+            tracker_.set_metadata(std::nullopt);
             console::print(
                 "foo_lastfm_scrobbler: could not read current track metadata"
             );
         }
     }
 
-    lastfm_scrobbler::listening_session session_;
-    std::optional<lastfm_scrobbler::track_metadata> current_metadata_;
-    double last_reported_time_ = 0.0;
-    bool has_reported_time_ = false;
-    bool playback_is_paused_ = false;
-    bool submission_attempted_ = false;
-    bool now_playing_requested_ = false;
-    std::int64_t started_at_unix_ = 0;
+    lastfm_scrobbler::playback_tracker tracker_{*this};
 };
 
 play_callback_static_factory_t<playback_observer> playback_observer_factory;

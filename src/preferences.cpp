@@ -122,6 +122,9 @@ public:
         if (!was_aborted && error_.empty() && session_.has_value()) {
             try {
                 session_config::save(*session_);
+                // Notify the dispatcher even if the preferences page has closed.
+                // In-flight requests must no longer affect this new session.
+                submission_account_connected(session_->username);
                 saved_ = true;
                 console::print(
                     "foo_lastfm_scrobbler: Last.fm account connected"
@@ -438,7 +441,6 @@ private:
         }
 
         connected_username_ = task.username();
-        submission_account_connected(connected_username_);
         status_override_.clear();
         refresh_controls();
     }
