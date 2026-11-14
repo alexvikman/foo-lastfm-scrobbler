@@ -70,6 +70,31 @@ if ($env:SystemRoot) {
     }
 }
 & $tar -xf $archivePath -C $sdkDirectory
+
+# The tar bundled with Windows 10 and Windows Server 2022 cannot decode LZMA.
+# Fall back to 7-Zip where it is installed.
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $sdkHeader)) {
+    $sevenZip = $null
+    $sevenZipCommand = Get-Command 7z.exe -ErrorAction SilentlyContinue
+    if ($sevenZipCommand) {
+        $sevenZip = $sevenZipCommand.Source
+    } else {
+        foreach ($programFiles in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+            if ($programFiles -and (Test-Path -LiteralPath (Join-Path $programFiles '7-Zip\7z.exe'))) {
+                $sevenZip = Join-Path $programFiles '7-Zip\7z.exe'
+                break
+            }
+        }
+    }
+
+    if ($sevenZip) {
+        Write-Host 'The system tar could not read the archive; extracting with 7-Zip instead.'
+        Remove-Item -LiteralPath $sdkDirectory -Recurse -Force
+        New-Item -ItemType Directory -Force -Path $sdkDirectory | Out-Null
+        & $sevenZip x $archivePath "-o$sdkDirectory" -y | Out-Null
+    }
+}
+
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $sdkHeader)) {
     throw 'The foobar2000 SDK archive could not be extracted.'
 }
