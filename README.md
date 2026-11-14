@@ -28,6 +28,16 @@ Authorization opens Last.fm in the default browser. After approval, return to
 foobar2000 and select **Finish connection**. The resulting session is encrypted
 for the current Windows user and reused automatically.
 
+## Verifying a download
+
+Packages built by the release workflow carry a signed build-provenance
+attestation that ties them to the tagged source. With the GitHub CLI installed,
+a downloaded package can be checked with:
+
+```powershell
+gh attestation verify foo_lastfm_scrobbler.fb2k-component --repo alexvikman/foo-lastfm-scrobbler
+```
+
 ## Scrobbling rules
 
 A track must have artist and title tags and be longer than 30 seconds. It is

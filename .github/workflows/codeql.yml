@@ -1,0 +1,56 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: '23 4 * * 1'
+
+# The job opts in to the few permissions it needs.
+permissions: {}
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  analyze:
+    name: Analyze C++
+    runs-on: windows-2022
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write # upload the code scanning results
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download and verify the pinned foobar2000 SDK
+        run: ./scripts/bootstrap-sdk.ps1
+
+      # The SDK is compiled as part of the build but is third-party code, so
+      # findings inside it are left out of the results.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-extended
+          config: |
+            paths-ignore:
+              - .deps
+
+      - name: Build
+        run: ./scripts/build.ps1 -SkipTests
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:c-cpp

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# Each job opts in to the few permissions it needs.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    name: Build, test and package
+    # windows-2022 carries Visual Studio 2022 and the v143 toolset this
+    # project targets; newer images ship a newer toolset.
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download and verify the pinned foobar2000 SDK
+        run: ./scripts/bootstrap-sdk.ps1
+
+      - name: Build and run the core tests
+        run: ./scripts/build.ps1
+
+      # No API credentials are present here, so this package cannot connect an
+      # account. The step exists to enforce the release checks on every change.
+      - name: Package and verify the exploit mitigations
+        run: ./scripts/package.ps1
