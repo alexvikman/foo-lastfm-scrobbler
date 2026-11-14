@@ -1,5 +1,6 @@
 #include "lastfm_protocol.h"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cctype>
@@ -16,6 +17,51 @@ namespace {
 
 constexpr std::size_t maximum_response_size = 64 * 1024;
 constexpr unsigned maximum_json_depth = 32;
+constexpr std::size_t maximum_username_size = 256;
+constexpr std::size_t maximum_display_message_size = 256;
+
+[[nodiscard]] bool is_control_byte(unsigned char byte) noexcept {
+    return byte < 0x20 || byte == 0x7f;
+}
+
+// The account name is stored, shown in the preferences page and binds the
+// offline queue to an account, so it must be a short single-line value.
+[[nodiscard]] bool is_plausible_username(std::string_view value) noexcept {
+    if (value.empty() || value.size() > maximum_username_size) {
+        return false;
+    }
+    for (const auto raw_byte : value) {
+        if (is_control_byte(static_cast<unsigned char>(raw_byte))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Text supplied by the server ends up in the console and the preferences
+// page. Keep it bounded and on one line without splitting a UTF-8 sequence.
+[[nodiscard]] std::string sanitize_message(std::string_view value) {
+    const auto kept = std::min(value.size(), maximum_display_message_size);
+    std::string output;
+    output.reserve(kept + 3);
+    for (const auto raw_byte : value.substr(0, kept)) {
+        const auto byte = static_cast<unsigned char>(raw_byte);
+        output.push_back(is_control_byte(byte) ? ' ' : raw_byte);
+    }
+
+    if (kept < value.size()) {
+        while (!output.empty() &&
+            (static_cast<unsigned char>(output.back()) & 0xc0) == 0x80) {
+            output.pop_back();
+        }
+        if (!output.empty() &&
+            static_cast<unsigned char>(output.back()) >= 0xc0) {
+            output.pop_back();
+        }
+        output.append("...");
+    }
+    return output;
+}
 
 [[nodiscard]] bool is_unreserved(unsigned char byte) noexcept {
     return (byte >= 'A' && byte <= 'Z') ||
@@ -460,7 +506,9 @@ private:
     if (fields.error_code.has_value()) {
         throw lastfm_api_error(
             *fields.error_code,
-            fields.error_message.value_or("Unknown Last.fm error")
+            sanitize_message(
+                fields.error_message.value_or("Unknown Last.fm error")
+            )
         );
     }
     return fields;
@@ -517,8 +565,8 @@ std::string parse_token_response(std::string_view json) {
 
 session_credentials parse_session_response(std::string_view json) {
     auto fields = parse_response(json);
-    if (!fields.username.has_value() || fields.username->empty() ||
-        fields.username->find('\0') != std::string::npos ||
+    if (!fields.username.has_value() ||
+        !is_plausible_username(*fields.username) ||
         !fields.session_key.has_value() ||
         !is_authentication_value(*fields.session_key)) {
         throw std::invalid_argument("Last.fm session response is malformed");
@@ -543,7 +591,9 @@ lastfm_submission_response parse_now_playing_response(
     return {
         .accepted = *fields.now_playing_ignored_code == 0,
         .ignored_code = *fields.now_playing_ignored_code,
-        .ignored_message = fields.now_playing_ignored_message.value_or(""),
+        .ignored_message = sanitize_message(
+            fields.now_playing_ignored_message.value_or("")
+        ),
     };
 }
 
@@ -575,7 +625,9 @@ lastfm_submission_response parse_scrobble_response(
     return {
         .accepted = accepted,
         .ignored_code = *fields.scrobble_ignored_code,
-        .ignored_message = fields.scrobble_ignored_message.value_or(""),
+        .ignored_message = sanitize_message(
+            fields.scrobble_ignored_message.value_or("")
+        ),
     };
 }
 

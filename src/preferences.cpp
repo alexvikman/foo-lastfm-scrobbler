@@ -292,19 +292,28 @@ private:
             default: return FALSE;
             }
 
-        case message_token_request_done:
-            token_request_done(
-                *reinterpret_cast<token_request_task*>(lparam),
-                wparam != FALSE
-            );
+        // Completion messages carry a task pointer. Only the task this page
+        // started is accepted, so a stray or forged message in the WM_APP
+        // range is ignored instead of being dereferenced.
+        case message_token_request_done: {
+            auto* const task = reinterpret_cast<token_request_task*>(lparam);
+            if (task == nullptr || task != pending_token_task_) {
+                return FALSE;
+            }
+            pending_token_task_ = nullptr;
+            token_request_done(*task, wparam != FALSE);
             return TRUE;
+        }
 
-        case message_session_request_done:
-            session_request_done(
-                *reinterpret_cast<session_request_task*>(lparam),
-                wparam != FALSE
-            );
+        case message_session_request_done: {
+            auto* const task = reinterpret_cast<session_request_task*>(lparam);
+            if (task == nullptr || task != pending_session_task_) {
+                return FALSE;
+            }
+            pending_session_task_ = nullptr;
+            session_request_done(*task, wparam != FALSE);
             return TRUE;
+        }
 
         default:
             return FALSE;
@@ -332,6 +341,7 @@ private:
                 window_,
                 credentials_
             );
+            pending_token_task_ = task.get_ptr();
             threaded_process::get()->run_modeless(
                 task,
                 threaded_process::flag_show_abort |
@@ -341,6 +351,7 @@ private:
                 "Connect Last.fm account"
             );
         } catch (const std::exception& exception) {
+            pending_token_task_ = nullptr;
             busy_ = false;
             flow_.fail_request();
             set_error(exception.what());
@@ -363,6 +374,7 @@ private:
                 credentials_,
                 flow_.request_token()
             );
+            pending_session_task_ = task.get_ptr();
             threaded_process::get()->run_modeless(
                 task,
                 threaded_process::flag_show_abort |
@@ -372,6 +384,7 @@ private:
                 "Connect Last.fm account"
             );
         } catch (const std::exception& exception) {
+            pending_session_task_ = nullptr;
             busy_ = false;
             flow_.fail_request();
             set_error(exception.what());
@@ -560,6 +573,8 @@ private:
     auth_flow flow_;
     std::string connected_username_;
     std::string status_override_;
+    const token_request_task* pending_token_task_ = nullptr;
+    const session_request_task* pending_session_task_ = nullptr;
     bool busy_ = false;
     fb2k::CCoreDarkModeHooks dark_mode_;
 };

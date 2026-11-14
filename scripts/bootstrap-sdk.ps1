@@ -22,13 +22,36 @@ if ((Test-Path $sdkHeader) -and -not $Force) {
 New-Item -ItemType Directory -Force -Path $dependencyDirectory | Out-Null
 
 if ($Force -or -not (Test-Path $archivePath)) {
+    # Windows PowerShell 5.1 still offers SSL 3.0/TLS 1.0 unless told otherwise.
+    # A value of 0 means the operating system policy is already in charge.
+    if ([int][Net.ServicePointManager]::SecurityProtocol -ne 0) {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    }
+
+    # Download beside the final path and promote the file only once its
+    # checksum matches, so an interrupted or altered download is never left
+    # where a later run would trust it.
+    $downloadPath = "$archivePath.download"
     Write-Host "Downloading foobar2000 SDK $sdkVersion..."
-    Invoke-WebRequest -Uri $sdkUrl -OutFile $archivePath
+    try {
+        Invoke-WebRequest -Uri $sdkUrl -OutFile $downloadPath -UseBasicParsing
+        $downloadHash = (Get-FileHash -LiteralPath $downloadPath -Algorithm SHA256).Hash
+        if ($downloadHash -ne $expectedHash) {
+            throw "SDK checksum mismatch. Expected $expectedHash but received $downloadHash."
+        }
+        Move-Item -LiteralPath $downloadPath -Destination $archivePath -Force
+    } finally {
+        if (Test-Path -LiteralPath $downloadPath) {
+            Remove-Item -LiteralPath $downloadPath -Force
+        }
+    }
 }
 
-$actualHash = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash
+# A cached archive may predate this run, so it is verified as well.
+$actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
 if ($actualHash -ne $expectedHash) {
-    throw "SDK checksum mismatch. Expected $expectedHash but received $actualHash."
+    Remove-Item -LiteralPath $archivePath -Force
+    throw "SDK checksum mismatch. Expected $expectedHash but received $actualHash. The cached archive was removed; run this script again."
 }
 
 if (Test-Path $sdkDirectory) {
@@ -36,7 +59,17 @@ if (Test-Path $sdkDirectory) {
 }
 
 New-Item -ItemType Directory -Force -Path $sdkDirectory | Out-Null
-tar -xf $archivePath -C $sdkDirectory
+
+# Prefer the libarchive tar that ships with Windows over whatever is first on
+# PATH; GNU tar from other toolchains cannot read 7z archives either.
+$tar = 'tar'
+if ($env:SystemRoot) {
+    $systemTar = Join-Path $env:SystemRoot 'System32\tar.exe'
+    if (Test-Path -LiteralPath $systemTar) {
+        $tar = $systemTar
+    }
+}
+& $tar -xf $archivePath -C $sdkDirectory
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $sdkHeader)) {
     throw 'The foobar2000 SDK archive could not be extracted.'
 }

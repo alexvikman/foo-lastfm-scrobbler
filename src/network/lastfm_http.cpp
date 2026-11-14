@@ -34,7 +34,7 @@ constexpr std::size_t maximum_response_size = 64 * 1024;
         "application/x-www-form-urlencoded; charset=utf-8"
     );
     request->add_header("Accept", "application/json");
-    request->add_header("User-Agent", "foo_lastfm_scrobbler/0.4.2");
+    request->add_header("User-Agent", "foo_lastfm_scrobbler/0.4.3");
 
     auto response_stream = request->run_ex(api_endpoint, abort);
     std::string response;

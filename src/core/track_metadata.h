@@ -1,10 +1,16 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 
 namespace lastfm_scrobbler {
+
+// Tags are read from arbitrary media files. Real names are far shorter than
+// this; anything longer is treated as malformed instead of being signed,
+// uploaded and persisted.
+inline constexpr std::size_t maximum_metadata_field_bytes = 4096;
 
 struct source_track_metadata {
     std::string artist;
@@ -34,6 +40,8 @@ enum class metadata_error {
     missing_title,
     filtered_artist,
     filtered_title,
+    oversized_artist,
+    oversized_title,
 };
 
 struct metadata_result {

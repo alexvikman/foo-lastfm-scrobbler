@@ -21,6 +21,9 @@ constexpr std::array<std::uint8_t, 5> payload_header = {
 constexpr std::size_t maximum_field_size = 16 * 1024;
 constexpr std::size_t maximum_plaintext_size = 16 * 1024 * 1024;
 
+// Every track the metadata normalizer accepts must be storable.
+static_assert(maximum_metadata_field_bytes <= maximum_field_size);
+
 void ensure_room(const std::vector<std::uint8_t>& output, std::size_t extra) {
     if (extra > maximum_plaintext_size ||
         output.size() > maximum_plaintext_size - extra) {

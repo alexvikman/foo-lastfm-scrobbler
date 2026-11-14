@@ -125,6 +125,12 @@ metadata_result normalize_track_metadata(const source_track_metadata& source) {
     if (result.title.empty()) {
         return {.error = metadata_error::missing_title};
     }
+    if (result.artist.size() > maximum_metadata_field_bytes) {
+        return {.error = metadata_error::oversized_artist};
+    }
+    if (result.title.size() > maximum_metadata_field_bytes) {
+        return {.error = metadata_error::oversized_title};
+    }
     if (is_filtered_artist(result.artist)) {
         return {.error = metadata_error::filtered_artist};
     }
@@ -132,9 +138,15 @@ metadata_result normalize_track_metadata(const source_track_metadata& source) {
         return {.error = metadata_error::filtered_title};
     }
 
+    // Optional fields are dropped rather than truncated, so a submission never
+    // carries a partial name.
     result.album = normalize_text(source.album);
+    if (result.album.size() > maximum_metadata_field_bytes) {
+        result.album.clear();
+    }
     result.album_artist = normalize_text(source.album_artist);
-    if (ascii_lower(result.album_artist) == ascii_lower(result.artist)) {
+    if (result.album_artist.size() > maximum_metadata_field_bytes ||
+        ascii_lower(result.album_artist) == ascii_lower(result.artist)) {
         result.album_artist.clear();
     }
 
@@ -166,6 +178,10 @@ const char* metadata_error_message(metadata_error error) noexcept {
         return "artist tag contains a known placeholder";
     case metadata_error::filtered_title:
         return "title tag contains a known placeholder";
+    case metadata_error::oversized_artist:
+        return "artist tag is unreasonably long";
+    case metadata_error::oversized_title:
+        return "title tag is unreasonably long";
     }
 
     return "unknown metadata error";

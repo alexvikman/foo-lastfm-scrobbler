@@ -5,7 +5,7 @@
 
 DECLARE_COMPONENT_VERSION(
     "Last.fm Scrobbler",
-    "0.4.2",
+    "0.4.3",
     "Scrobbles music played in foobar2000 directly to Last.fm.\n"
     "Includes now-playing updates, encrypted queueing, automatic retry, and submission diagnostics."
 );

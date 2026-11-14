@@ -211,6 +211,109 @@ void test_optional_metadata_is_safely_omitted() {
         "an invalid optional duration is omitted");
 }
 
+void test_oversized_metadata_is_bounded() {
+    using namespace lastfm_scrobbler;
+
+    const std::string at_limit(maximum_metadata_field_bytes, 'a');
+    const std::string over_limit(maximum_metadata_field_bytes + 1, 'a');
+
+    auto result = normalize_track_metadata({
+        .artist = at_limit,
+        .title = at_limit,
+        .album = at_limit,
+    });
+    expect(static_cast<bool>(result) && result.value->album == at_limit,
+        "metadata at the size limit is accepted unchanged");
+
+    result = normalize_track_metadata({.artist = over_limit, .title = "Title"});
+    expect(result.error == metadata_error::oversized_artist &&
+        !static_cast<bool>(result),
+        "an artist tag beyond the size limit is rejected");
+
+    result = normalize_track_metadata({.artist = "Artist", .title = over_limit});
+    expect(result.error == metadata_error::oversized_title &&
+        !static_cast<bool>(result),
+        "a title tag beyond the size limit is rejected");
+
+    result = normalize_track_metadata({
+        .artist = "Artist",
+        .title = "Title",
+        .album = over_limit,
+        .album_artist = over_limit,
+    });
+    expect(static_cast<bool>(result) && result.value->album.empty() &&
+        result.value->album_artist.empty(),
+        "oversized optional tags are omitted rather than truncated");
+
+    const persisted_scrobble_queue queue{
+        .owner_username = "test-user",
+        .records = {{
+            .track = {
+                .artist = at_limit,
+                .title = at_limit,
+                .album = at_limit,
+                .album_artist = at_limit,
+            },
+            .started_at_unix = 1'700'000'000,
+        }},
+    };
+    expect(deserialize_scrobble_queue(serialize_scrobble_queue(queue)) == queue,
+        "the largest accepted metadata fits in the queue format");
+}
+
+void test_server_text_is_bounded_and_single_line() {
+    using namespace lastfm_scrobbler;
+
+    bool control_character_rejected = false;
+    try {
+        static_cast<void>(parse_session_response(
+            R"({"session":{"key":"0123456789abcdefghijklmnopqrstuv","name":"user\nname"}})"
+        ));
+    } catch (const std::invalid_argument&) {
+        control_character_rejected = true;
+    }
+    expect(control_character_rejected,
+        "an account name containing control characters is rejected");
+
+    bool oversized_name_rejected = false;
+    try {
+        static_cast<void>(parse_session_response(
+            R"({"session":{"key":"0123456789abcdefghijklmnopqrstuv","name":")" +
+            std::string(257, 'a') + R"("}})"
+        ));
+    } catch (const std::invalid_argument&) {
+        oversized_name_rejected = true;
+    }
+    expect(oversized_name_rejected,
+        "an implausibly long account name is rejected");
+
+    std::string error_text;
+    try {
+        parse_remove_now_playing_response(
+            R"({"error":6,"message":"first line\r\nfoo_lastfm_scrobbler: forged )" +
+            std::string(1000, 'x') + R"("})"
+        );
+    } catch (const lastfm_api_error& error) {
+        error_text = error.what();
+    }
+    expect(!error_text.empty() &&
+        error_text.find('\n') == std::string::npos &&
+        error_text.find('\r') == std::string::npos &&
+        error_text.size() < 300,
+        "Last.fm error text is kept short and on a single line");
+
+    std::string umlauts;
+    for (int index = 0; index < 200; ++index) {
+        umlauts.append("\xc3\xb6");
+    }
+    const auto ignored = parse_scrobble_response(
+        R"({"scrobbles":{"@attr":{"accepted":"0","ignored":"1"},"scrobble":{"ignoredMessage":{"#text":"a)" +
+        umlauts + R"(","code":"1"}}}})"
+    );
+    expect(ignored.ignored_message == "a" + umlauts.substr(0, 254) + "...",
+        "long server text is truncated on a UTF-8 character boundary");
+}
+
 void test_lastfm_signature() {
     using namespace lastfm_scrobbler;
 
@@ -609,6 +712,8 @@ int main() {
     test_required_metadata_and_placeholders();
     test_metadata_normalization();
     test_optional_metadata_is_safely_omitted();
+    test_oversized_metadata_is_bounded();
+    test_server_text_is_bounded_and_single_line();
     test_lastfm_signature();
     test_auth_request_builders();
     test_lastfm_form_and_json_protocol();

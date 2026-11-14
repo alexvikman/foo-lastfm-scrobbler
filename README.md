@@ -84,6 +84,14 @@ The Last.fm session and pending scrobbles are encrypted with Windows DPAPI in
 the current-user scope before being stored in foobar2000 configuration.
 Disconnecting the account removes the saved session and its pending queue.
 
+Disconnecting only deletes the local copy of the session. To revoke the
+component's access to the account as well, remove it under
+[Last.fm Settings > Applications](https://www.last.fm/settings/applications).
+
+DPAPI protects the stored data from other Windows accounts and from copies of
+the foobar2000 profile. It does not protect it from other programs running as
+the same Windows user.
+
 The foobar2000 SDK is not included in this repository. See
 [`THIRD_PARTY.md`](THIRD_PARTY.md) for the pinned version and checksum.
 

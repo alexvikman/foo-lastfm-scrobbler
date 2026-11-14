@@ -666,6 +666,12 @@ void submission_dispatcher::task_done(
     const bool invalid_session = error_code == 9;
     const bool retryable_api_error =
         error_code == 11 || error_code == 16 || error_code == 29;
+    // Errors 10 (invalid API key) and 26 (suspended API key) reject this
+    // build's application credentials, which ship inside the component and
+    // can be abused by anyone. They say nothing about the scrobble itself, so
+    // the queue must survive them instead of being discarded entry by entry.
+    const bool application_key_rejected =
+        error_code == 10 || error_code == 26;
     if (invalid_session) {
         invalidate_session();
     }
@@ -761,6 +767,14 @@ void submission_dispatcher::task_done(
                 task.error().c_str()
             );
             schedule_retry();
+        } else if (application_key_rejected) {
+            console::complain(
+                "foo_lastfm_scrobbler: Last.fm rejected this build's API key; scrobbles remain queued",
+                task.error().c_str()
+            );
+            schedule_retry();
+            status_ =
+                "Last.fm rejected this build's API key; queued scrobbles are preserved.";
         } else {
             remove_record = true;
             status_ = "Last.fm permanently rejected the last scrobble.";

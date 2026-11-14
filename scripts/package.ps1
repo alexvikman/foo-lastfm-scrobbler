@@ -28,6 +28,18 @@ foreach ($file in $packageFiles) {
     }
 }
 
+# A release must not disclose the build machine's directory layout or account
+# name. The Release link step strips the PDB directory; refuse to package a
+# DLL that was linked without it.
+if ($Configuration -eq 'Release') {
+    $componentText = [System.Text.Encoding]::GetEncoding(28591).GetString(
+        [System.IO.File]::ReadAllBytes($componentPath)
+    )
+    if ($componentText -match '[A-Za-z]:\\[\x20-\x7e]+\.pdb') {
+        throw "The component embeds an absolute PDB path ($($Matches[0])). Rebuild it with scripts\build.ps1 before packaging."
+    }
+}
+
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
